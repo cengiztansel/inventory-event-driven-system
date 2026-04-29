@@ -10,21 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    services:
-      # We spin up PostgreSQL and Redis for testing during build
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: St716944
-          POSTGRES_DB: inventory
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:latest
-        ports:
-          - 6379:6379
-
     steps:
     - uses: actions/checkout@v4
 
@@ -38,8 +23,7 @@ jobs:
     - name: Build with Maven
       run: |
         cd inventory-service
-        mvn clean package -DskipTests 
-        # Note: I skip tests here for speed
+        mvn clean package -DskipTests
 
-    - name: Docker Build Test
-      run: docker-compose build
+    - name: Docker Build
+      run: docker compose build
