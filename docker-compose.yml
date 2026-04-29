@@ -1,0 +1,95 @@
+services:
+
+  backend:
+    build: ./inventory-service
+    container_name: inventory-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Spring Boot'un doğrudan anladığı değişkenler (Önceliklidir)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/inventory
+      SPRING_DATASOURCE_USERNAME: postgres  # DB servisindeki POSTGRES_USER ile aynı olmalı
+      SPRING_DATASOURCE_PASSWORD: St716944 # DB servisindeki POSTGRES_PASSWORD ile aynı olmalı
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      # Bizim application.properties içinde kullandığımız özel değişkenler
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:latest
+    container_name: inventory-redis
+    ports:
+      - "6379:6379"
+
+  # Event-Driven (Olay Güdümlü) mimari için Kafka, Zookeeper, kafdrop
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # Kafka UI: kafdrop: Mesajları tarayıcıdan izlemek için
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:29092"
+    depends_on:
+      - kafka
+
+
+  # 1. Veritabanı
+  db:
+    image: postgres:16-alpine
+    container_name: inventory-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: St716944
+      POSTGRES_DB: inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d inventory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. React Frontend (Nginx ile)
+  frontend:
+    build: ./inventory-frontend  # Dockerfile'ı bu klasörde ara
+    container_name: inventory-frontend
+    ports:
+      - "3000:80"                # Nginx'in 80 portunu dışarı 3000 olarak aç
+    #volumes:
+     # - ./inventory-frontend:/app
+      #- /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
